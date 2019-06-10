@@ -1,24 +1,27 @@
 /*
 The zlib/libpng License
 
-Copyright (c) 2005-2007 Phillip Castaneda (pjcast -- www.wreckedgames.com)
+Copyright (c) 2018 Arthur Brainville
+Copyright (c) 2015 Andrew Fenn
+Copyright (c) 2005-2010 Phillip Castaneda (pjcast -- www.wreckedgames.com)
 
-This software is provided 'as-is', without any express or implied warranty. In no event will
-the authors be held liable for any damages arising from the use of this software.
+This software is provided 'as-is', without any express or implied warranty. In no
+event will the authors be held liable for any damages arising from the use of this
+software.
 
-Permission is granted to anyone to use this software for any purpose, including commercial
-applications, and to alter it and redistribute it freely, subject to the following
-restrictions:
+Permission is granted to anyone to use this software for any purpose, including
+commercial applications, and to alter it and redistribute it freely, subject to the
+following restrictions:
 
     1. The origin of this software must not be misrepresented; you must not claim that
-		you wrote the original software. If you use this software in a product,
-		an acknowledgment in the product documentation would be appreciated but is
-		not required.
+        you wrote the original software. If you use this software in a product,
+        an acknowledgment in the product documentation would be appreciated
+        but is not required.
 
     2. Altered source versions must be plainly marked as such, and must not be
-		misrepresented as being the original software.
+        misrepresented as being the original software.
 
-    3. This notice may not be removed or altered from any source distribution.
+    3. This notice may not be removed or altered from any source distribution.   
 */
 #include "win32/Win32JoyStick.h"
 #include "win32/Win32InputManager.h"
@@ -63,12 +66,14 @@ using namespace OIS;
 
 //--------------------------------------------------------------------------------------------------//
 Win32JoyStick::Win32JoyStick(InputManager* creator, IDirectInput8* pDI, bool buffered, DWORD coopSettings, const JoyStickInfo& info) :
- JoyStick(info.vendor, buffered, info.devId, creator),
- mDirectInput(pDI),
- coopSetting(coopSettings),
- mJoyStick(0),
- mJoyInfo(info),
- mFfDevice(0)
+	JoyStick(info.vendor, buffered, info.devId, creator),
+	mDirectInput(pDI),
+	mJoyStick(nullptr),
+	mDIJoyCaps(),
+	coopSetting(coopSettings),
+	mJoyInfo(info),
+	mFfDevice(nullptr),
+	_AxisNumber(0)
 {
 }
 
@@ -81,7 +86,7 @@ Win32JoyStick::~Win32JoyStick()
 	{
 		mJoyStick->Unacquire();
 		mJoyStick->Release();
-		mJoyStick = 0;
+		mJoyStick = nullptr;
 	}
 
 	//Return joystick to pool
@@ -101,7 +106,7 @@ void Win32JoyStick::_initialize()
 		mState.mAxes.clear();
 
 		delete mFfDevice;
-		mFfDevice = 0;
+		mFfDevice = nullptr;
 
 		DIPROPDWORD dipdw;
 
@@ -117,7 +122,7 @@ void Win32JoyStick::_initialize()
 		if(FAILED(mJoyStick->SetDataFormat(&c_dfDIJoystick2)))
 			OIS_EXCEPT(E_General, "Win32JoyStick::_initialize() >> data format error!");
 
-		HWND hwin = ((Win32InputManager*)mCreator)->getWindowHandle();
+		HWND hwin = static_cast<Win32InputManager*>(mCreator)->getWindowHandle();
 
 		if(FAILED(mJoyStick->SetCooperativeLevel(hwin, coopSetting)))
 			OIS_EXCEPT(E_General, "Win32JoyStick::_initialize() >> failed to set cooperation level!");
@@ -151,7 +156,7 @@ void Win32JoyStick::_enumerate()
 		if(FAILED(mJoyStick->GetCapabilities(&mDIJoyCaps)))
 			OIS_EXCEPT(E_General, "Win32JoyStick::_enumerate >> Failed to get capabilities");
 
-		mPOVs = (short)mDIJoyCaps.dwPOVs;
+		mPOVs = short(mDIJoyCaps.dwPOVs);
 
 		mState.mButtons.resize(mDIJoyCaps.dwButtons);
 		mState.mAxes.resize(mDIJoyCaps.dwAxes);
@@ -237,7 +242,7 @@ BOOL CALLBACK Win32JoyStick::DIEnumEffectsCallback(LPCDIEFFECTINFO pdei, LPVOID 
 	Win32JoyStick* _this = (Win32JoyStick*)pvRef;
 
 	//Create the FF instance only after we know there is at least one effect type
-	if(_this->mFfDevice == 0)
+	if(_this->mFfDevice == nullptr)
 		_this->mFfDevice = new Win32ForceFeedback(_this->mJoyStick, &_this->mDIJoyCaps);
 
 	_this->mFfDevice->_addEffectSupport(pdei);
@@ -372,13 +377,13 @@ void Win32JoyStick::capture()
 		//Update axes
 		for(int i = 0; i < 24; ++i)
 			if(axisMoved[i])
-				if(mListener->axisMoved(temp, i) == false)
+				if(!mListener->axisMoved(temp, i))
 					return;
 
 		//Now update sliders
 		for(int i = 0; i < 4; ++i)
 			if(sliderMoved[i])
-				if(mListener->sliderMoved(temp, i) == false)
+				if(!mListener->sliderMoved(temp, i))
 					return;
 	}
 }
@@ -556,20 +561,20 @@ Interface* Win32JoyStick::queryInterface(Interface::IType type)
 	if(mFfDevice && type == Interface::ForceFeedback)
 		return mFfDevice;
 	else
-		return 0;
+		return nullptr;
 }
 
 //--------------------------------------------------------------------------------------------------//
 #ifdef OIS_WIN32_XINPUT_SUPPORT
 void Win32JoyStick::CheckXInputDevices(JoyStickInfoList& joys)
 {
-	IWbemLocator* pIWbemLocator		   = NULL;
-	IEnumWbemClassObject* pEnumDevices = NULL;
-	IWbemClassObject* pDevices[20]	 = { 0 };
-	IWbemServices* pIWbemServices	  = NULL;
-	BSTR bstrNamespace				   = NULL;
-	BSTR bstrDeviceID				   = NULL;
-	BSTR bstrClassName				   = NULL;
+	IWbemLocator* pIWbemLocator		   = nullptr;
+	IEnumWbemClassObject* pEnumDevices = nullptr;
+	IWbemClassObject* pDevices[20]	 = { nullptr };
+	IWbemServices* pIWbemServices	  = nullptr;
+	BSTR bstrNamespace				   = nullptr;
+	BSTR bstrDeviceID				   = nullptr;
+	BSTR bstrClassName				   = nullptr;
 	DWORD uReturned					   = 0;
 	bool bIsXinputDevice			   = false;
 	DWORD iDevice					   = 0;
@@ -577,40 +582,40 @@ void Win32JoyStick::CheckXInputDevices(JoyStickInfoList& joys)
 	VARIANT var;
 	HRESULT hr;
 
-	if(joys.size() == 0)
+	if(joys.empty())
 		return;
 
 	// CoInit if needed
-	hr				 = CoInitialize(NULL);
+	hr				 = CoInitialize(nullptr);
 	bool bCleanupCOM = SUCCEEDED(hr);
 
 	// Create WMI
-	hr = CoCreateInstance(__uuidof(WbemLocator), NULL, CLSCTX_INPROC_SERVER, __uuidof(IWbemLocator), (LPVOID*)&pIWbemLocator);
-	if(FAILED(hr) || pIWbemLocator == NULL)
+	hr = CoCreateInstance(__uuidof(WbemLocator), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IWbemLocator), (LPVOID*)&pIWbemLocator);
+	if(FAILED(hr) || pIWbemLocator == nullptr)
 		goto LCleanup;
 
 	bstrNamespace = SysAllocString(L"\\\\.\\root\\cimv2");
-	if(bstrNamespace == NULL)
+	if(bstrNamespace == nullptr)
 		goto LCleanup;
 
 	bstrClassName = SysAllocString(L"Win32_PNPEntity");
-	if(bstrClassName == NULL)
+	if(bstrClassName == nullptr)
 		goto LCleanup;
 
 	bstrDeviceID = SysAllocString(L"DeviceID");
-	if(bstrDeviceID == NULL)
+	if(bstrDeviceID == nullptr)
 		goto LCleanup;
 
 	// Connect to WMI
-	hr = pIWbemLocator->ConnectServer(bstrNamespace, NULL, NULL, 0L, 0L, NULL, NULL, &pIWbemServices);
-	if(FAILED(hr) || pIWbemServices == NULL)
+	hr = pIWbemLocator->ConnectServer(bstrNamespace, nullptr, nullptr, nullptr, 0L, nullptr, nullptr, &pIWbemServices);
+	if(FAILED(hr) || pIWbemServices == nullptr)
 		goto LCleanup;
 
 	// Switch security level to IMPERSONATE.
-	CoSetProxyBlanket(pIWbemServices, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+	CoSetProxyBlanket(pIWbemServices, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
 
-	hr = pIWbemServices->CreateInstanceEnum(bstrClassName, 0, NULL, &pEnumDevices);
-	if(FAILED(hr) || pEnumDevices == NULL)
+	hr = pIWbemServices->CreateInstanceEnum(bstrClassName, 0, nullptr, &pEnumDevices);
+	if(FAILED(hr) || pEnumDevices == nullptr)
 		goto LCleanup;
 
 	// Loop over all devices
@@ -627,8 +632,8 @@ void Win32JoyStick::CheckXInputDevices(JoyStickInfoList& joys)
 		for(iDevice = 0; iDevice < uReturned; iDevice++)
 		{
 			// For each device, get its device ID
-			hr = pDevices[iDevice]->Get(bstrDeviceID, 0L, &var, NULL, NULL);
-			if(SUCCEEDED(hr) && var.vt == VT_BSTR && var.bstrVal != NULL)
+			hr = pDevices[iDevice]->Get(bstrDeviceID, 0L, &var, nullptr, nullptr);
+			if(SUCCEEDED(hr) && var.vt == VT_BSTR && var.bstrVal != nullptr)
 			{
 				// Check if the device ID contains "IG_".  If it does, then it's an XInput device - This information can not be found from DirectInput
 				if(wcsstr(var.bstrVal, L"IG_"))
@@ -655,7 +660,7 @@ void Win32JoyStick::CheckXInputDevices(JoyStickInfoList& joys)
 						}
 					}
 
-					if(joys.size() == 0)
+					if(joys.empty())
 						goto LCleanup;
 				}
 			}
